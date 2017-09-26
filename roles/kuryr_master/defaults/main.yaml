@@ -1,0 +1,12 @@
+---
+# Kuryr username
+kuryr_openstack_username: kuryr
+
+# Kuryr username domain
+kuryr_openstack_user_domain_name: Default
+
+# Kuryr username domain
+kuryr_openstack_project_domain_name: Default
+
+# Kuryr OpenShift namespace
+kuryr_namespace: kube-system

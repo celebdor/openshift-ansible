@@ -1,0 +1,83 @@
+---
+- name: Configure kuryr controller
+  become: yes
+  template:
+    src: kuryr.conf.j2
+    dest: /etc/kuryr/kuryr.conf
+    mode: 0640
+    owner: kuryr
+    group: kuryr
+
+- name: Perform OpenShit ServiceAccount config
+  include: serviceaccount.yaml
+
+- name: Create Kuryr Controller DeploymentConfig yaml file
+  become: yes
+  template: src=kuryr-controller-deploymentconfig.j2 dest=/etc/kuryr-controller-deploymentconfig.yaml owner=root mode=0644
+
+- name: Create Kuryr CNI daemon set yaml file
+  become: yes
+  template: src=kuryr-cni-daemonset.j2 dest=/etc/kuryr-cni-daemonset.yaml owner=root mode=0644
+
+- name: Ensure Kuryr Controller Deployment
+  oc_obj:
+    name: kuryr-controller
+    namespace: "{{ kuryr_namespace }}"
+    state: present
+    kind: Deployment
+    content:
+      data:
+        apiVersion: extensions/v1beta1
+        kind: Deployment
+        metadata:
+          name: kuryr-controller
+          namespace: "{{ kuryr_namespace }}"
+          labels:
+            app: kuryr-controller
+        spec:
+          strategy:
+            type: RollingUpdate
+            rollingUpdate:
+              maxSurge: 1
+              maxUnavailable: 1
+          replicas: 1
+          template:
+            metadata:
+              labels:
+                app: kuryr-controller
+            spec:
+              serviceAccount: kuryr-controller
+              restartPolicy: Always
+              containers:
+                - image: "{{ kuryr_controller_image }}"
+                  name: kuryr-controller
+                  imagePullPolicy: IfNotPresent
+                  volumeMounts:
+                    - name: config-volume
+                      mountPath: /etc/kuryr
+                  volumes:
+                    - name: config-volume
+                      configMap:
+                        name: kuryr-controller-config
+                        items:
+                          - key: default
+                            path: default.conf
+                          - key: kubernetes
+                            path: kubernetes.conf
+                          - key: neutron
+                            path: neutron.conf
+                          - key: neutron_defaults
+                            path: neutron_defaults.conf
+                          - key: binding
+                            path: binding.conf
+
+
+
+  shell: oc create -f /etc/kuryr-controller-deploymentconfig.yaml
+  ignore_errors: true
+  when: inventory_hostname == groups.oo_first_master.0
+
+- name: Ensure Kuryr CNI daemonset
+  shell: oc create -f /etc/kuryr-cni-daemonset.yaml
+  ignore_errors: true
+  when: inventory_hostname == groups.oo_first_master.0

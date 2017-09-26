@@ -1,0 +1,40 @@
+---
+- name: Create CNI extraction tempdir
+  command: mktemp -d
+  register: cni_tmpdir
+
+- name: Download CNI
+  get_url:
+    url: "{{ cni_bin_url }}"
+    mode: 0644
+    dest: "{{ cni_tmpdir.stdout }}"
+  register: downloaded_tarball
+
+- name: Extract CNI
+  unarchive:
+    src: "{{ downloaded_tarball.dest }}"
+    dest:  "{{ cni_tmpdir.stdout }}"
+    remote_src: yes
+  when: downloaded_tarball.changed
+
+- name: Create CNI bin directory
+  file:
+    state: directory
+    path: "{{ cni_bin_dir }}"
+    mode: 0755
+    owner: root
+    group: root
+    recurse: yes
+
+- name: Get loopback cni plugin installed
+  copy:
+    src:  "{{ cni_tmpdir.stdout }}/loopback"
+    dest: "{{ cni_bin_dir }}/loopback"
+    remote_src: True
+    mode: 0755
+
+- name: Ensure CNI net.d exists
+  file:
+    path: /etc/cni/net.d
+    recurse: yes
+    state: directory
