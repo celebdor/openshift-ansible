@@ -259,6 +259,18 @@ resources:
     properties:
       floating_network: { get_param: floating_network }
       port_id: { get_resource: port }
+
+  lb_member:
+    type: OS::Neutron::LBaaS::PoolMember
+    condition:
+      equals:
+        - get_param: type
+        - master
+    properties:
+      pool: { get_param: api_lb_pool }
+      protocol_port: {{ openshift_master_api_port|default(8443) }}
+      address: { get_attr: [server, first_address]}
+      subnet: { get_param: subnet }
 {% endif %}
 
 {% if not openshift_openstack_ephemeral_volumes|default(false)|bool %}
@@ -274,19 +286,4 @@ resources:
       volume_id: { get_resource: cinder_volume }
       instance_uuid: { get_resource: server }
       mountpoint: /dev/sdb
-{% endif %}
-
-
-{% if use_kuryr|default(false)|bool %}
-  lb_member:
-    type: OS::Neutron::LBaaS::PoolMember
-    condition:
-      equals:
-        - get_param: type
-        - master
-    properties:
-      pool: { get_param: api_lb_pool }
-      protocol_port: {{ openshift_master_api_port|default(8443) }}
-      address: { get_attr: [server, first_address]}
-      subnet: { get_param: subnet }
 {% endif %}

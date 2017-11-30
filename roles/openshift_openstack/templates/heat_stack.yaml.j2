@@ -95,7 +95,6 @@ conditions:
 resources:
 
 {% if not openshift_openstack_provider_network_name %}
-{% if use_kuryr|default(false)|bool %}
   api_lb:
     type: OS::Neutron::LBaaS::LoadBalancer
     properties:
@@ -104,11 +103,23 @@ resources:
           template: openshift-ansible-cluster_id-api-lb
           params:
             cluster_id: {{ openshift_openstack_stack_name }}
+{% if use_kuryr|default(false)|bool %}
       vip_address:
           template: subnet_16_prefix.0.1
           params:
             subnet_16_prefix: {{ openshift_openstack_kuryr_service_subnet_prefix }}
       vip_subnet: { get_resource: service_subnet }
+{% else %}
+      vip_subnet: { get_resource: subnet }
+
+  api_lb_fip:
+    condition: { not: no_floating }
+    type: OS::Neutron::FloatingIP
+    properties:
+      floating_network: {{ openshift_openstack_external_network_name }}
+      port_id: { get_attr: [api_lb, vip_port_id] }
+
+{% endif %}
 
   api_lb_listener:
     type: OS::Neutron::LBaaS::Listener
@@ -134,6 +145,7 @@ resources:
       lb_algorithm: ROUND_ROBIN
       listener: { get_resource: api_lb_listener }
 
+{% if use_kuryr|default(false)|bool %}
   pod_net:
     type: OS::Neutron::Net
     properties:
