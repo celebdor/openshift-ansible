@@ -54,6 +54,24 @@ outputs:
     description: Floating IPs of the nodes
     value: { get_attr: [ infra_nodes, floating_ip ] }
 
+{% if use_kuryr|default(false)|bool %}
+  vm_subnet:
+    description: ID of the subnet the Pods will be on
+    value: { get_resource: subnet }
+
+  pod_subnet:
+    description: ID of the subnet the Pods will be on
+    value: { get_resource: pod_subnet }
+
+  service_subnet:
+    description: ID of the subnet the services will be on
+    value: { get_resource: service_subnet }
+
+  pod_access_sg_id:
+    description: Id of the security group for services to be able to reach pods
+    value: { get_resource: pod_access_sg }
+{% endif %}
+
 {% if openshift_openstack_num_dns|int > 0 %}
   dns_name:
     description: Name of the DNS
@@ -77,6 +95,112 @@ conditions:
 resources:
 
 {% if not openshift_openstack_provider_network_name %}
+{% if use_kuryr|default(false)|bool %}
+  api_lb:
+    type: OS::Neutron::LBaaS::LoadBalancer
+    properties:
+      name:
+        str_replace:
+          template: openshift-ansible-cluster_id-api-lb
+          params:
+            cluster_id: {{ openshift_openstack_stack_name }}
+      vip_address:
+          template: subnet_16_prefix.0.1
+          params:
+            subnet_16_prefix: {{ openshift_openstack_kuryr_service_subnet_prefix }}
+      vip_subnet: { get_resource: service_subnet }
+
+  api_lb_listener:
+    type: OS::Neutron::LBaaS::Listener
+    properties:
+      name:
+        str_replace:
+          template: openshift-ansible-cluster_id-api-lb-listener
+          params:
+            cluster_id: {{ openshift_openstack_stack_name }}
+      loadbalancer: { get_resource: api_lb }
+      protocol: HTTPS
+      protocol_port: 443
+
+  api_lb_pool:
+    type: OS::Neutron::LBaaS::Pool
+    properties:
+      name:
+        str_replace:
+          template: openshift-ansible-cluster_id-api-lb-pool
+          params:
+            cluster_id: {{ openshift_openstack_stack_name }}
+      protocol: HTTPS
+      lb_algorithm: ROUND_ROBIN
+      listener: { get_resource: api_lb_listener }
+
+  pod_net:
+    type: OS::Neutron::Net
+    properties:
+      name:
+        str_replace:
+          template: openshift-ansible-cluster_id-pod-net
+          params:
+            cluster_id: {{ openshift_openstack_stack_name }}
+
+  pod_subnet:
+    type: OS::Neutron::Subnet
+    properties:
+      network_id: { get_resource: pod_net }
+      cidr: {{ openshift_openstack_kuryr_pod_subnet_cidr }}
+      enable_dhcp: False
+      name:
+        str_replace:
+          template: openshift-ansible-cluster_id-pod-subnet
+          params:
+            cluster_id: {{ openshift_openstack_stack_name }}
+      dns_nameservers:
+{% for nameserver in openshift_openstack_dns_nameservers %}
+        - {{ nameserver }}
+{% endfor %}
+
+  service_net:
+    type: OS::Neutron::Net
+    properties:
+      name:
+        str_replace:
+          template: openshift-ansible-cluster_id-service-net
+          params:
+            cluster_id: {{ openshift_openstack_stack_name }}
+
+  service_subnet:
+    type: OS::Neutron::Subnet
+    properties:
+      network_id: { get_resource: service_net }
+      cidr: {{ openshift_openstack_kuryr_service_subnet_cidr }}
+        str_replace:
+          template: subnet_16_prefix.0.0/16
+          params:
+            subnet_16_prefix: {{ openshift_openstack_kuryr_service_subnet_prefix }}
+      gateway_ip:
+          template: subnet_16_prefix.255.254
+          params:
+            subnet_16_prefix: {{ openshift_openstack_kuryr_service_subnet_prefix }}
+      enable_dhcp: False
+      allocation_pools:
+        - start:
+            str_replace:
+              template: subnet_16_prefix.0.2
+              params:
+                subnet_16_prefix: {{ openshift_openstack_kuryr_service_subnet_prefix }}
+          end:
+            str_replace:
+              template: subnet_16_prefix.0.253
+              params:
+                subnet_24_prefix: {{ openshift_openstack_subnet_prefix }}
+      name:
+        str_replace:
+          template: openshift-ansible-cluster_id-service-subnet
+          params:
+            cluster_id: {{ openshift_openstack_stack_name }}
+
+{% endif %}
+
   net:
     type: OS::Neutron::Net
     properties:
@@ -149,6 +273,36 @@ resources:
       router_id: { get_resource: router }
       subnet_id: { get_resource: subnet }
 
+{% if use_kuryr|default(false)|bool %}
+  pod_subnet_interface:
+    type: OS::Neutron::RouterInterface
+    properties:
+      router_id: { get_resource: router }
+      subnet_id: { get_resource: pod_subnet }
+
+  service_router_port:
+      type: OS::Neutron::Port
+      properties:
+        network: { get_resource: service_net}
+        fixed_ips:
+          - subnet: { get_resource: service_subnet }
+            ip_address:
+              template: subnet_16_prefix.255.254
+              params:
+                subnet_16_prefix: {{ openshift_openstack_kuryr_service_subnet_prefix }}
+        name:
+          str_replace:
+            template: openshift-ansible-cluster_id-service-subnet-router-port
+            params:
+            cluster_id: {{ openshift_openstack_stack_name }}
+
+  service_subnet_interface:
+    type: OS::Neutron::RouterInterface
+    properties:
+      router_id: { get_resource: router }
+      port: { get_resource: service_router_port }
+{% endif %}
+
 {% endif %}
 
 #  keypair:
@@ -190,6 +344,31 @@ resources:
         - direction: ingress
           protocol: icmp
           remote_ip_prefix: {{ openshift_openstack_ssh_ingress_cidr }}
+
+{% if use_kuryr|default(false)|bool %}
+  pod_access_sg:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      name:
+        str_replace:
+          template: openshift-ansible-cluster_id-pod-service-secgrp
+          params:
+            cluster_id: {{ openshift_openstack_stack_name }}
+      description: Give services and nodes access to the pods
+      rules:
+      - ethertype: IPv4
+        remote_ip_prefix:
+          str_replace:
+            template: subnet_16_prefix.0.0/16
+            params:
+              subnet_16_prefix: {{ openshift_openstack_kuryr_service_subnet_prefix }}
+      - ethertype: IPv4
+        remote_ip_prefix:
+          str_replace:
+            template: subnet_24.0/24
+            params:
+              subnet_24_prefix: {{ openshift_openstack_subnet_prefix }}
+{% endif %}
 
 {% if openshift_openstack_flat_secgrp|default(False)|bool %}
   flat-secgrp:
@@ -669,6 +848,9 @@ resources:
           data_subnet: { get_resource: data_subnet }
 {% endif %}
 {% endif %}
+{% if use_kuryr|default(false)|bool %}
+          api_lb_pool: { get_resource: api_lb_pool }
+{% endif}
           secgrp:
 {% if openshift_openstack_flat_secgrp|default(False)|bool %}
             - { get_resource: flat-secgrp }
