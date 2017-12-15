@@ -949,6 +949,72 @@ resources:
       - interface
 {% endif %}
 
+  baremetal_compute_nodes:
+    type: OS::Heat::ResourceGroup
+    properties:
+      count: {{ openshift_openstack_num_baremetal_nodes }}
+      removal_policies:
+      - resource_list: {{ openshift_openstack_baremetal_nodes_to_remove }}
+      resource_def:
+        type: server.yaml
+        properties:
+          name:
+            str_replace:
+              template: sub_type_k8s_type-%index%.cluster_id
+              params:
+                cluster_id: {{ openshift_openstack_stack_name }}
+                sub_type_k8s_type: {{ openshift_openstack_node_hostname }}
+          cluster_env: {{ openshift_openstack_public_dns_domain }}
+          cluster_id:  {{ openshift_openstack_stack_name }}
+          group:
+            str_replace:
+              template: k8s_type.cluster_id
+              params:
+                k8s_type: nodes
+                cluster_id: {{ openshift_openstack_stack_name }}
+          type:        node
+          subtype:     bm_app
+          node_labels:
+{% for k, v in openshift_openstack_cluster_node_labels.bm_app.items() %}
+            {{ k|e }}: {{ v|e }}
+{% endfor %}
+          image:       {{ openshift_openstack_baremetal_node_image }}
+          flavor:      {{ openshift_openstack_baremetal_node_flavor }}
+          key_name:    {{ openshift_openstack_keypair_name }}
+{% if openshift_openstack_provider_network_name %}
+          net:         {{ openshift_openstack_provider_network_name }}
+          net_name:         {{ openshift_openstack_provider_network_name }}
+{% else %}
+          net:         { get_resource: net }
+          subnet:      { get_resource: subnet }
+          net_name:
+            str_replace:
+              template: openshift-ansible-cluster_id-net
+              params:
+                cluster_id: {{ openshift_openstack_stack_name }}
+{% if openshift_use_flannel|default(False)|bool %}
+          attach_data_net: true
+          data_net:    { get_resource: data_net }
+          data_subnet: { get_resource: data_subnet }
+{% endif %}
+{% endif %}
+          secgrp:
+            - { get_resource: {% if openshift_openstack_flat_secgrp|default(False)|bool %}flat-secgrp{% else %}node-secgrp{% endif %} }
+            - { get_resource: common-secgrp }
+          floating_network:
+            if:
+              - no_floating
+              - null
+              - {{ openshift_openstack_external_network_name }}
+{% if openshift_openstack_use_bastion|bool or openshift_openstack_provider_network_name %}
+          attach_float_net: false
+{% endif %}
+          volume_size: {{ openshift_openstack_node_volume_size }}
+{% if not openshift_openstack_provider_network_name %}
+    depends_on:
+      - interface
+{% endif %}
+
   infra_nodes:
     type: OS::Heat::ResourceGroup
     properties:

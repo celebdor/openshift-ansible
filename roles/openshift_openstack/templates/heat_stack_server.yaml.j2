@@ -265,12 +265,20 @@ resources:
 {% if not openshift_openstack_ephemeral_volumes|default(false)|bool %}
   cinder_volume:
     type: OS::Cinder::Volume
+    condition:
+      not:
+        - get_param: subtype
+        - bm_app
     properties:
       size: { get_param: volume_size }
       availability_zone: { get_param: availability_zone }
 
   volume_attachment:
     type: OS::Cinder::VolumeAttachment
+    condition:
+      not:
+        - get_param: subtype
+        - bm_app
     properties:
       volume_id: { get_resource: cinder_volume }
       instance_uuid: { get_resource: server }
