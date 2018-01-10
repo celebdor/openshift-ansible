@@ -1,0 +1,37 @@
+#cloud-config
+disable_root: true
+
+write_files:
+  - path: /usr/local/bin/kubelet_internal_port
+    permissions: 550
+    content: |
+      function ovs_bind_for_kubelet() {
+          local port_mac
+          local port_id
+          local port_cidr
+
+          port_mac=$1
+          port_id=$2
+          port_cidr=$3
+
+          sudo ovs-vsctl -- --may-exist add-port br-int kubelet \
+              -- set Interface kubelet type=internal \
+              -- set Interface kubelet external-ids:iface-status=active \
+              -- set Interface kubelet external-ids:attached-mac="$port_mac" \
+              -- set Interface kubelet external-ids:iface-id="$port_id"
+
+          sudo ip link set dev kubelet address "$port_mac"
+          sudo ip link set dev kubelet up
+          sudo ip addr add "$port_cidr" dev "$ifname"
+      done
+     }
+     ovs_bind_for_kubelet "$@"
+
+runcmd:
+  - [sed, -i, -e, s/__internal_api_ip_cidr__/__api_ip_cidr__/g, -e, s/__tenant_vxlan_ip_cidr__/__vxlan_ip_cidr__, -e, s/__provisioning_ip_cidr__/__instance_ip_cidr__/, /etc/os-net-config/baremetal_config.yaml]
+  - [sudo, os-net-config -c /etc/os-net-config/baremetal_config.yaml]
+  - [sed, -i, -e, s/__tenant_vxlan_ip_cidr__/__vxlan_ip_cidr__/, /etc/neutron/plugins/ml2/openvswitch-agent.ini]
+  - [sed, -i, -e, s/__hostname__/$(hostname)/g, /etc/neutron/neutron.conf]
+  - [echo, "__instance_ip_cidr__ $(hostname)", >>, /etc/hosts]
+  - [/usr/local/bin/kubelet_internal_port, __vxlan_mac_addr__, __vxlan_port_uuid__, __vxlan_ip_cidr__]
+  - [systemctl, restart, neutron-openvswitch-agent.service]

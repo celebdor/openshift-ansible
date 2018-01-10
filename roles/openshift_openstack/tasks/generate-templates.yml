@@ -9,6 +9,7 @@
   set_fact:
     stack_template_path: "{{ stack_template_pre.path }}/stack.yaml"
     user_data_template_path: "{{ stack_template_pre.path }}/user-data"
+    bm_user_data_template_path: "{{ stack_template_pre.path }}/bm-user-data"
 
 - name: Print out the Heat template directory
   debug: var=stack_template_pre
@@ -27,6 +28,11 @@
   template:
     src: user_data.j2
     dest: "{{ user_data_template_path }}"
+
+- name: generate baremetal user_data from jinja2 template
+  template:
+    src: bm_user_data.j2
+    dest: "{{ bm_user_data_template_path }}"
 
 - name: generate HOT nested subports template from jinja2 template
   template:

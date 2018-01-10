@@ -69,6 +69,18 @@ parameters:
 {% endif %}
 
 {% if openshift_use_kuryr|default(false)|bool %}
+  kubelet_net:
+    type: string
+    label: Kubelet Net ID
+    description: Net resource
+    default: ''
+
+  kubelet_subnet:
+    type: string
+    label: Kubelet Subnet ID
+    description: Subnet resource
+    default: ''
+
   pod_net:
     type: string
     label: Pod Net ID
@@ -201,6 +213,10 @@ conditions:
 {% if use_trunk_ports|default(False)|bool %}
   app_node: { equals: [{ get_param: subtype }, 'app'] }
 {% endif %}
+  bm_app_node:
+    equals:
+      - get_param: subtype
+      - bm_app
 
 resources:
 
@@ -230,7 +246,42 @@ resources:
 {% endif %}
 {% endif %}
       user_data:
-        get_file: user-data
+        if:
+        - bm_app_node
+        - str_replace:
+            template:
+              get_file: bm-user-data
+            params:
+              __api_ip_cidr__:
+                list_join:
+                - ''
+                - - { get_attr: [bm_api_port, fixed_ips, 0, ip_address] }
+                  - '/'
+                  - str_split:
+                    - '/'
+                    - get_attr: [bm_api_port, subnets, 0, cidr]
+                    - 1
+              __vxlan_ip_cidr__:
+                list_join:
+                - ''
+                - - { get_attr: [bm_vxlan_port, fixed_ips, 0, ip_address] }
+                  - '/'
+                  - str_split:
+                    - '/'
+                    - get_attr: [bm_vxlan_port, subnets, 0, cidr]
+                    - 1
+              __instance_ip_cidr__:
+                list_join:
+                - ''
+                - - { get_attr: [port, fixed_ips, 0, ip_address] }
+                  - '/'
+                  - str_split:
+                    - '/'
+                    - get_attr: [port, subnets, 0, cidr]
+                    - 1
+              __vxlan_mac_addr__: { get_attr: [bm_vxlan_port, mac_address] }
+              __vxlan_port_uuid__: { get_resource: bm_vxlan_port }
+        - get_file: user-data
       user_data_format: RAW
       user_data_update_policy: IGNORE
       metadata:
@@ -303,6 +354,30 @@ resources:
         - subnet: { get_param: data_subnet }
 {% endif %}
 {% endif %}
+
+  bm_api_port:
+    type: OS::Neutron::Port
+    condition: bm_app_node
+    properties:
+      network: {{ openshift_openstack_baremetal_api_net }}
+      fixed_ips:
+        - subnet: {{ openshift_openstack_baremetal_api_subnet }}
+
+  bm_vxlan_port:
+    type: OS::Neutron::Port
+    condition: bm_app_node
+    properties:
+      network: {{ openshift_openstack_baremetal_vxlan_net }}
+      fixed_ips:
+        - subnet: {{ openshift_openstack_baremetal_vxlan_subnet }}
+
+  bm_kubelet_port:
+    type: OS::Neutron::Port
+    condition: bm_app_node
+    properties:
+      network: { get_param: kubelet_net }
+      fixed_ips:
+        - subnet: { get_param: kubelet_subnet }
 
 {% if not openshift_openstack_provider_network_name %}
   floating-ip:

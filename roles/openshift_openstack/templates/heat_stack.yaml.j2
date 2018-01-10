@@ -1005,6 +1005,8 @@ resources:
           net:         provisioning
           subnet:      provisioning-subnet
 {% if openshift_use_kuryr|default(false)|bool %}
+          kubelet_net: { get_resource: net }
+          kubelet_subnet: { get_resource: subnet }
           pod_net:     { get_resource: pod_net }
           pod_subnet:  { get_resource: pod_subnet }
 {% endif %}
