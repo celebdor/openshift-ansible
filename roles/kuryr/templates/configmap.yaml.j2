@@ -112,8 +112,7 @@ data:
 
     [binding]
 
-    driver = kuryr.lib.binding.drivers.vlan
-    link_iface = eth0
+    default_driver = kuryr.lib.binding.drivers.vlan
 
     [kubernetes]
 
@@ -329,7 +328,6 @@ data:
 
     [binding]
 
-    driver = kuryr.lib.binding.drivers.vlan
     link_iface = {{ kuryr_cni_link_interface }}
 
     [kubernetes]
