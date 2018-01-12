@@ -100,8 +100,8 @@ def build_inventory():
             # performance issues.
             hostvars['openshift_ip'] = server.private_v4
             hostvars['openshift_hostname'] = server.private_v4
-        if hasattr(server,'kubelet_port_id'):
-            hostvars['kubelet_port_id'] = server.kubelet_port_id
+        if hasattr(server,'kubelet_port_name'):
+            hostvars['kubelet_port_name'] = server.kubelet_port_name
         hostvars['openshift_public_hostname'] = server.name
 
         node_labels = server.metadata.get('node_labels')
@@ -160,7 +160,7 @@ def _update_bm_app_with_kubelet_port(hosts, ports):
         host_bound_ports = bm_ports[host['name']]
         kubelet_port, = [port for port in host_bound_ports if 'kubelet' in port['name']]
         host['private_v4'] = kubelet_port['fixed_ips'][0]['ip_address']
-        host['kubelet_port_id'] = kubelet_port['id']
+        host['kubelet_port_name'] = kubelet_port['name']
 
 
 if __name__ == '__main__':

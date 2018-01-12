@@ -50,7 +50,7 @@
   - name: Update the port
     os_port:
       state: present
-      name: "{{ kubelet_port_id }}"
+      name: "{{ kubelet_port_name }}"
       device_owner: compute:shiftstack
     delegate_to: localhost
 
