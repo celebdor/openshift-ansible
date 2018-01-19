@@ -38,10 +38,13 @@ write_files:
       BOOTPROTO=static
       IPADDR=__kubelet_ip__
       PREFIX=__kubelet_prefix__
-      #GATEWAY=__kubelet_gateway__
       PEERDNS=yes
       DNS1=__kubelet_dns1__
       DNS2=__kubelet_dns2__
+  - path: /etc/sysconfig/network-scripts/route-kubelet
+    permissions: 0664
+    content: |
+      __pod_subnet_cidr__ via __kubelet_gateway__ dev kubelet
   - path: /usr/local/bin/bm_node_reconfigure
     permissions: 0550
     content: |

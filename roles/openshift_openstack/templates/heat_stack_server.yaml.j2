@@ -92,6 +92,12 @@ parameters:
     label: Pod Subnet ID
     description: Subnet resource
     default: ''
+
+  pod_subnet_cidr:
+    type: string
+    label: Pod Subnet CIDR
+    description: Subnet CIDR
+    default: ''
 {% endif %}
 
 {% if openshift_use_flannel|default(False)|bool %}
@@ -294,6 +300,7 @@ resources:
               __kubelet_gateway__: { get_attr: [bm_kubelet_port, subnets, 0, gateway_ip] }
               __kubelet_dns1__: { get_attr: [bm_kubelet_port, subnets, 0, dns_nameservers, 0] }
               __kubelet_dns2__: { get_attr: [bm_kubelet_port, subnets, 0, dns_nameservers, 1] }
+	      __pod_subnet_cidr__: { get_param: pod_subnet_cidr }
         - get_file: user-data
       user_data_format: RAW
       user_data_update_policy: IGNORE

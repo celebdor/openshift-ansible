@@ -725,6 +725,7 @@ resources:
           subnet:      { get_resource: subnet }
           pod_net:     { get_resource: pod_net }
           pod_subnet:  { get_resource: pod_subnet }
+          pod_subnet_cidr: { get_attr: [pod_subnet, cidr] }
           net_name:
             str_replace:
               template: openshift-ansible-cluster_id-net
